@@ -10,22 +10,40 @@ fun main(args: Array<String>) = TagesschauRssPolling().run()
 class TagesschauRssPolling {
     fun run() {
         println("Startup $javaClass")
+        scheduleTimer(
+                startAt = "20:15".calendar(),
+                giveUpAfter = "22:00".calendar()
+        )
+    }
+
+    private fun String.calendar(): Calendar {
+        val splitInts = split(':').map(String::toInt)
+        return Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, splitInts[0])
+            set(Calendar.MINUTE, splitInts[1])
+        }
+    }
+
+    private fun scheduleTimer(startAt: Calendar, giveUpAfter: Calendar) {
         fun getTimestamp() = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())
         var attempt = 1
         timer(
                 name = "tagesschau-rss-polling",
                 daemon = false,
-                startAt = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, 20)
-                    set(Calendar.MINUTE, 15)
-                }.time,
+                startAt = startAt.time,
                 period = 60000,
                 action = {
                     print("\n${getTimestamp()} Try ${attempt++}")
-                    if (checkForNewTagesschau()) {
+                    if (newTagesschauAvailable()) {
                         alertUser()
                         cancel()
                         exitProcess(status = 0)
+                    } else if (Date().after(giveUpAfter.time)) {
+                        // Cancel and reschedule for tomorrow
+                        cancel()
+                        print("\nGiving up for today and reschedule for tomorrow")
+                        val startAtTomorrow = startAt.apply { add(Calendar.DAY_OF_MONTH, 1) }
+                        scheduleTimer(startAtTomorrow, giveUpAfter)
                     }
                 }
         )
@@ -36,7 +54,7 @@ class TagesschauRssPolling {
         "cvlc".exec(arrayOf("src/main/resources/tagesschau-2000.mp3", "--play-and-exit"), true)
     }
 
-    private fun checkForNewTagesschau(): Boolean {
+    private fun newTagesschauAvailable(): Boolean {
         /*
             view-source:https://www.tagesschau.de/export/video-podcast/webl/tagesschau/
 
