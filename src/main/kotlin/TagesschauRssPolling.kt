@@ -5,7 +5,6 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.concurrent.timer
-import kotlin.system.exitProcess
 
 
 fun main(args: Array<String>) = TagesschauRssPolling().run()
@@ -34,30 +33,38 @@ private class TagesschauRssPolling {
                 name = "tagesschau-rss-polling",
                 daemon = false,
                 startAt = startAt.time,
+                // time in milliseconds between successive task executions.
                 period = 60000,
                 action = {
                     print("\n${getTimestamp()} Try ${attempt++}")
                     if (newTagesschauAvailable()) {
                         alertUser()
                         cancel()
-                        exitProcess(status = 0)
+                        rescheduleForTomorrow(startAt, giveUpAfter)
                     } else if (Date().after(giveUpAfter.time)) {
+                        print("\nGiving up for today.")
                         // Cancel and reschedule for tomorrow
                         cancel()
-                        print("\nGiving up for today and reschedule for tomorrow")
-                        val startAtTomorrow = startAt.apply { add(Calendar.DAY_OF_MONTH, 1) }
-                        scheduleTimer(startAtTomorrow, giveUpAfter)
+                        rescheduleForTomorrow(startAt, giveUpAfter)
+                    } else {
+                        // this no-op means waiting for next task execution
                     }
                 }
         )
     }
 
-    private fun getSoundFilePath(): String {
+    private fun rescheduleForTomorrow(startAt: Calendar, giveUpAfter: Calendar) {
+        print("\nReschedule for tomorrow.")
+        val startAtTomorrow = startAt.apply { add(Calendar.DAY_OF_MONTH, 1) }
+        scheduleTimer(startAtTomorrow, giveUpAfter)
+    }
+
+    private val soundFilePath : String by lazy {
         val soundFileName = "tagesschau-2000.mp3"
         val soundFilePathWhenNotInJar = "src/main/resources/$soundFileName"
         fun isJarFileExecution(): Boolean = !File(soundFilePathWhenNotInJar).exists()
 
-        return when {
+        when {
             !isJarFileExecution() -> soundFilePathWhenNotInJar
             else -> {
                 File.createTempFile(soundFileName, null).apply {
@@ -72,11 +79,12 @@ private class TagesschauRssPolling {
             }
         }
     }
+
     private fun alertUser() {
         "notify-send".exec(arrayOf("Zeit für die Tagesschau"))
         "cvlc".exec(
                 arrayOf(
-                        getSoundFilePath(),
+                        soundFilePath,
                         "--play-and-exit"),
                 true)
     }
