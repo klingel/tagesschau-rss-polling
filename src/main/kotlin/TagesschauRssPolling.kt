@@ -1,13 +1,16 @@
 import com.github.kittinunf.fuel.httpGet
 import com.github.kittinunf.result.Result
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.concurrent.timer
 import kotlin.system.exitProcess
 
+
 fun main(args: Array<String>) = TagesschauRssPolling().run()
 
-class TagesschauRssPolling {
+private class TagesschauRssPolling {
     fun run() {
         println("Startup $javaClass")
         scheduleTimer(
@@ -49,9 +52,33 @@ class TagesschauRssPolling {
         )
     }
 
+    private fun getSoundFilePath(): String {
+        val soundFileName = "tagesschau-2000.mp3"
+        val soundFilePathWhenNotInJar = "src/main/resources/$soundFileName"
+        fun isJarFileExecution(): Boolean = !File(soundFilePathWhenNotInJar).exists()
+
+        return when {
+            !isJarFileExecution() -> soundFilePathWhenNotInJar
+            else -> {
+                File.createTempFile(soundFileName, null).apply {
+                    deleteOnExit()
+                    TagesschauRssPolling::class.java
+                            .getResourceAsStream(soundFileName)
+                            .copyTo(FileOutputStream(this))
+                }
+                .absolutePath.apply {
+                    println(this)
+                }
+            }
+        }
+    }
     private fun alertUser() {
         "notify-send".exec(arrayOf("Zeit für die Tagesschau"))
-        "cvlc".exec(arrayOf("src/main/resources/tagesschau-2000.mp3", "--play-and-exit"), true)
+        "cvlc".exec(
+                arrayOf(
+                        getSoundFilePath(),
+                        "--play-and-exit"),
+                true)
     }
 
     private fun newTagesschauAvailable(): Boolean {
